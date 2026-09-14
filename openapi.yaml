@@ -21,6 +21,8 @@ servers:
   - url: /api/v1
 
 tags:
+  - name: Auth
+    description: Staff login. Issues the bearer token every Staff endpoint requires.
   - name: Guest
     description: Public endpoints used by guests joining/tracking the waitlist. No auth required.
   - name: Staff - Parties
@@ -33,6 +35,41 @@ tags:
 security: []
 
 paths:
+  # ------------------------------------------------------------------
+  # Auth
+  # ------------------------------------------------------------------
+  /auth/login:
+    post:
+      operationId: login
+      tags: [Auth]
+      summary: Staff login
+      description: >
+        Exchanges a staff username/password for a bearer token to use on
+        every Staff endpoint. Not part of `WaitlistService` (the frontend's
+        mock has no real auth), but required for a real backend.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: >-
+            Authenticated. Use the returned token as an `Authorization` bearer
+            header on subsequent Staff requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid username or password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   # ------------------------------------------------------------------
   # Guest-facing endpoints (no authentication)
   # ------------------------------------------------------------------
@@ -774,3 +811,33 @@ components:
           type: string
           description: Human-readable message (mirrors `WaitlistServiceError.message`).
           example: Table T1 is not available
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: staff
+        password:
+          type: string
+          format: password
+          example: waitlist123
+
+    TokenResponse:
+      type: object
+      required: [accessToken, tokenType, expiresAt, staffName]
+      properties:
+        accessToken:
+          type: string
+          example: E6a1MmcOMHodfcGkJoX8j-tM3q4ligTA2-NRx1hX2lQ
+        tokenType:
+          type: string
+          enum: [bearer]
+          example: bearer
+        expiresAt:
+          type: string
+          format: date-time
+        staffName:
+          type: string
+          example: Pilot Staff
