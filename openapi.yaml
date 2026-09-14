@@ -1,0 +1,776 @@
+openapi: 3.0.3
+info:
+  title: Restaurant Waitlist Manager API
+  description: >
+    Backend contract expected by the `waitlist-app` frontend
+    (`waitlist-app/src/services/WaitlistService.ts`). The frontend currently
+    talks to a mock implementation (`mockWaitlistService.ts`) that holds this
+    same data in memory/localStorage; this document specifies the real HTTP
+    API a backend must implement so the frontend can swap the mock for a real
+    service with no UI changes.
+
+    Endpoints are split into two groups:
+      - **Guest** endpoints: used by the public, account-less guest pages
+        (join waitlist, status page). No authentication.
+      - **Staff** endpoints: used by the staff dashboard to manage the queue
+        and tables. Require staff authentication.
+  version: "1.0.0"
+  license:
+    name: Proprietary
+servers:
+  - url: /api/v1
+
+tags:
+  - name: Guest
+    description: Public endpoints used by guests joining/tracking the waitlist. No auth required.
+  - name: Staff - Parties
+    description: Waitlist queue management for staff. Requires authentication.
+  - name: Staff - Tables
+    description: Table management for staff. Requires authentication.
+  - name: Realtime
+    description: Live-update stream mirrored by `WaitlistService.subscribe()` in the frontend.
+
+security: []
+
+paths:
+  # ------------------------------------------------------------------
+  # Guest-facing endpoints (no authentication)
+  # ------------------------------------------------------------------
+  /parties:
+    post:
+      operationId: joinWaitlist
+      tags: [Guest]
+      summary: Join the waitlist
+      description: >
+        Creates a new party on the waitlist with status `waiting`.
+        Corresponds to `WaitlistService.joinWaitlist()`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinWaitlistInput'
+      responses:
+        '201':
+          description: Party created and added to the waitlist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+        '400':
+          description: Invalid input (missing name/contact, or party size < 1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      operationId: listParties
+      tags: [Staff - Parties]
+      summary: List every party
+      description: >
+        Returns every party (active and past), in the order staff manages
+        them in the dashboard. Corresponds to `WaitlistService.listParties()`.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All parties.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Party'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /parties/order:
+    put:
+      operationId: reorderParties
+      tags: [Staff - Parties]
+      summary: Reorder the waitlist queue
+      description: >
+        Replaces the party ordering with the supplied full, matching list of
+        party ids. Corresponds to `WaitlistService.reorderParties()`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderPartiesInput'
+      responses:
+        '200':
+          description: Parties in their new order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Party'
+        '400':
+          description: The supplied ids don't exactly match the current set of parties.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /parties/{partyId}:
+    parameters:
+      - $ref: '#/components/parameters/PartyId'
+    get:
+      operationId: getParty
+      tags: [Guest]
+      summary: Get a party's current status
+      description: >
+        Used by the guest status page to poll/refresh. Corresponds to
+        `WaitlistService.getParty()`.
+      security: []
+      responses:
+        '200':
+          description: The party.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+        '404':
+          description: Party not found (e.g. already removed from the waitlist).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: leaveWaitlist
+      tags: [Guest]
+      summary: Leave the waitlist
+      description: >
+        Guest voluntarily removes themselves from the waitlist. If a table
+        was assigned to them, it is freed. Corresponds to
+        `WaitlistService.leaveWaitlist()`.
+      security: []
+      responses:
+        '204':
+          description: Party removed.
+        '404':
+          description: Party not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /parties/{partyId}/queue-position:
+    parameters:
+      - $ref: '#/components/parameters/PartyId'
+    get:
+      operationId: getQueuePosition
+      tags: [Guest]
+      summary: Get a party's position in the queue
+      description: >
+        1-based position among parties currently `waiting` or
+        `arrival_confirmed`; `null` if the party isn't in that set (e.g.
+        already seated, or not found). Corresponds to
+        `WaitlistService.getQueuePosition()`.
+      security: []
+      responses:
+        '200':
+          description: Queue position, or null.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueuePositionResponse'
+        '404':
+          description: Party not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /parties/{partyId}/confirm-arrival:
+    parameters:
+      - $ref: '#/components/parameters/PartyId'
+    post:
+      operationId: confirmArrival
+      tags: [Guest]
+      summary: Guest confirms arrival ("I'm here")
+      description: >
+        Guest taps "I'm here" before the arrival deadline. Only valid while
+        the party's status is `waiting` or `table_ready`. Corresponds to
+        `WaitlistService.confirmArrival()`.
+      security: []
+      responses:
+        '200':
+          description: Updated party, with `arrivalConfirmedAt` set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+        '404':
+          description: Party not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Party status doesn't allow confirming arrival (e.g. already seated/cancelled).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /parties/{partyId}/wait-time:
+    parameters:
+      - $ref: '#/components/parameters/PartyId'
+    patch:
+      operationId: updateWaitTime
+      tags: [Staff - Parties]
+      summary: Set/update the estimated wait time
+      description: >
+        Staff manually enters the estimated wait, in minutes. Also (re)sets
+        the party's arrival confirmation deadline. Corresponds to
+        `WaitlistService.updateWaitTime()`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWaitTimeInput'
+      responses:
+        '200':
+          description: Updated party.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+        '400':
+          description: Wait time must be a non-negative number.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Party not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /parties/{partyId}/status:
+    parameters:
+      - $ref: '#/components/parameters/PartyId'
+    patch:
+      operationId: updatePartyStatus
+      tags: [Staff - Parties]
+      summary: Change a party's status
+      description: >
+        Staff transitions a party to any status (`waiting`,
+        `arrival_confirmed`, `table_ready`, `seated`, `cancelled`,
+        `no_show`). Cancelling or marking no-show automatically frees any
+        assigned table; marking seated leaves the table occupied until
+        staff releases it. Corresponds to
+        `WaitlistService.updatePartyStatus()`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePartyStatusInput'
+      responses:
+        '200':
+          description: Updated party.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Party not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /parties/{partyId}/assign-table:
+    parameters:
+      - $ref: '#/components/parameters/PartyId'
+    post:
+      operationId: assignTable
+      tags: [Staff - Parties]
+      summary: Assign an available table to a party
+      description: >
+        Marks the table `occupied` and the party `table_ready`. Frees any
+        table the party previously held. Corresponds to
+        `WaitlistService.assignTable()`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignTableInput'
+      responses:
+        '200':
+          description: The updated party and table.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignTableResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Party or table not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Table is not available.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ------------------------------------------------------------------
+  # Staff-facing endpoints: tables (all require authentication)
+  # ------------------------------------------------------------------
+  /tables:
+    get:
+      operationId: listTables
+      tags: [Staff - Tables]
+      summary: List every table
+      description: Corresponds to `WaitlistService.listTables()`.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All tables.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RestaurantTable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: addTable
+      tags: [Staff - Tables]
+      summary: Add a table
+      description: Corresponds to `WaitlistService.addTable()`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTableInput'
+      responses:
+        '201':
+          description: Table created with status `available`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestaurantTable'
+        '400':
+          description: Name is required and capacity must be a positive whole number.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tables/{tableId}:
+    parameters:
+      - $ref: '#/components/parameters/TableId'
+    delete:
+      operationId: removeTable
+      tags: [Staff - Tables]
+      summary: Remove a table
+      description: >
+        Fails if the table is currently assigned to a party. Corresponds to
+        `WaitlistService.removeTable()`.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Table removed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Table not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Table is currently assigned to a party.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /tables/{tableId}/status:
+    parameters:
+      - $ref: '#/components/parameters/TableId'
+    patch:
+      operationId: updateTableStatus
+      tags: [Staff - Tables]
+      summary: Change a table's status
+      description: >
+        Sets the table to `available`, `occupied`, or `unavailable`. Fails
+        if the table currently has a party assigned and the new status
+        isn't `occupied` - release the table first. Corresponds to
+        `WaitlistService.updateTableStatus()`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTableStatusInput'
+      responses:
+        '200':
+          description: Updated table.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestaurantTable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Table not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Table is assigned to a party; release it before changing its status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /tables/{tableId}/release:
+    parameters:
+      - $ref: '#/components/parameters/TableId'
+    post:
+      operationId: releaseTable
+      tags: [Staff - Tables]
+      summary: Release a table
+      description: >
+        Manually frees the table (status -> `available`) and unassigns its
+        party, if any (without changing the party's own status).
+        Corresponds to `WaitlistService.releaseTable()`.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Updated table.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestaurantTable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Table not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ------------------------------------------------------------------
+  # Realtime updates
+  # ------------------------------------------------------------------
+  /events:
+    get:
+      operationId: subscribeToEvents
+      tags: [Realtime]
+      summary: Live update stream (Server-Sent Events)
+      description: >
+        Mirrors `WaitlistService.subscribe()`: the frontend refetches
+        whatever it's showing whenever *any* event is received on this
+        stream (parties or tables changing). Events carry no payload the
+        client depends on - they are "something changed, please refetch"
+        signals, so the same stream can serve both the guest status page
+        and the staff dashboard. No authentication is required so the
+        guest status page (which has no login) can subscribe; staff clients
+        may additionally send their bearer token to also receive
+        staff-only diagnostic events, but the backend must not require it.
+      security: []
+      responses:
+        '200':
+          description: >
+            An open `text/event-stream` connection. Each event has
+            `event: update` and an empty or informational `data` field
+            (e.g. `data: {"entity":"party","id":"party_123"}`).
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Streaming (SSE) not supported by the client/proxy for this request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    PartyId:
+      name: partyId
+      in: path
+      required: true
+      description: Party identifier, e.g. `party_abc123`.
+      schema:
+        type: string
+    TableId:
+      name: tableId
+      in: path
+      required: true
+      description: Table identifier, e.g. `table_abc123`.
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid staff credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Staff authentication. All Staff endpoints require
+        `Authorization: Bearer <token>` for a logged-in staff member.
+        Guest endpoints never require this.
+
+  schemas:
+    PartyStatus:
+      type: string
+      description: >
+        `waiting` -> `arrival_confirmed` (optional) -> `table_ready` ->
+        `seated`, or diverted to `cancelled`/`no_show` at any point.
+      enum:
+        - waiting
+        - arrival_confirmed
+        - table_ready
+        - seated
+        - cancelled
+        - no_show
+
+    TableStatus:
+      type: string
+      enum:
+        - available
+        - occupied
+        - unavailable
+
+    Party:
+      type: object
+      description: A party (group of guests) on the waitlist.
+      required:
+        - id
+        - name
+        - partySize
+        - contact
+        - status
+        - estimatedWaitMinutes
+        - tableId
+        - arrivalDeadline
+        - arrivalConfirmedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          example: party_lz3k2j_1
+        name:
+          type: string
+          example: Jane Doe
+        partySize:
+          type: integer
+          minimum: 1
+          example: 3
+        contact:
+          type: string
+          description: Phone number (or other contact info) provided by the guest.
+          example: "555-0199"
+        status:
+          $ref: '#/components/schemas/PartyStatus'
+        estimatedWaitMinutes:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Manually entered by staff. `null` until staff sets an estimate.
+          example: 15
+        tableId:
+          type: string
+          nullable: true
+          description: Table currently assigned to this party, if any.
+        arrivalDeadline:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            ISO 8601 timestamp. Deadline for the guest to tap "I'm here"
+            once a wait time has been set.
+        arrivalConfirmedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO 8601 timestamp the guest tapped "I'm here", if they have.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RestaurantTable:
+      type: object
+      required:
+        - id
+        - name
+        - capacity
+        - status
+        - partyId
+      properties:
+        id:
+          type: string
+          example: table_lz3k2j_1
+        name:
+          type: string
+          example: T1
+        capacity:
+          type: integer
+          minimum: 1
+          example: 4
+        status:
+          $ref: '#/components/schemas/TableStatus'
+        partyId:
+          type: string
+          nullable: true
+          description: Party currently assigned to this table, if any.
+
+    JoinWaitlistInput:
+      type: object
+      required: [name, partySize, contact]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: Jane Doe
+        partySize:
+          type: integer
+          minimum: 1
+          example: 3
+        contact:
+          type: string
+          minLength: 1
+          example: "555-0199"
+
+    AddTableInput:
+      type: object
+      required: [name, capacity]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: T7
+        capacity:
+          type: integer
+          minimum: 1
+          example: 4
+
+    UpdateWaitTimeInput:
+      type: object
+      required: [minutes]
+      properties:
+        minutes:
+          type: number
+          minimum: 0
+          example: 20
+
+    UpdatePartyStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/PartyStatus'
+
+    UpdateTableStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/TableStatus'
+
+    ReorderPartiesInput:
+      type: object
+      required: [orderedIds]
+      properties:
+        orderedIds:
+          type: array
+          description: >
+            The full set of party ids, in the desired new order. Must
+            exactly match the ids of all existing parties.
+          items:
+            type: string
+
+    AssignTableInput:
+      type: object
+      required: [tableId]
+      properties:
+        tableId:
+          type: string
+
+    AssignTableResponse:
+      type: object
+      required: [party, table]
+      properties:
+        party:
+          $ref: '#/components/schemas/Party'
+        table:
+          $ref: '#/components/schemas/RestaurantTable'
+
+    QueuePositionResponse:
+      type: object
+      required: [position]
+      properties:
+        position:
+          type: integer
+          nullable: true
+          description: >
+            1-based position among parties currently `waiting` or
+            `arrival_confirmed`; `null` if not applicable (e.g. already
+            seated, or the party doesn't exist).
+          example: 2
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable message (mirrors `WaitlistServiceError.message`).
+          example: Table T1 is not available
