@@ -230,6 +230,20 @@ main {
   margin-bottom: 0.5rem;
 }
 
+.page-staff-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.staff-session {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .tabs {
   display: flex;
   gap: 0.5rem;

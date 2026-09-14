@@ -1,7 +1,9 @@
 import { Link, Route, Routes } from 'react-router-dom';
+import { RequireStaffAuth } from './components/RequireStaffAuth';
 import { GuestJoinPage } from './pages/GuestJoinPage';
 import { GuestStatusPage } from './pages/GuestStatusPage';
 import { StaffDashboardPage } from './pages/StaffDashboardPage';
+import { StaffLoginPage } from './pages/StaffLoginPage';
 
 export function App() {
   return (
@@ -19,7 +21,15 @@ export function App() {
         <Routes>
           <Route path="/" element={<GuestJoinPage />} />
           <Route path="/status/:partyId" element={<GuestStatusPage />} />
-          <Route path="/staff" element={<StaffDashboardPage />} />
+          <Route path="/staff/login" element={<StaffLoginPage />} />
+          <Route
+            path="/staff"
+            element={
+              <RequireStaffAuth>
+                <StaffDashboardPage />
+              </RequireStaffAuth>
+            }
+          />
           <Route path="*" element={<GuestJoinPage />} />
         </Routes>
       </main>

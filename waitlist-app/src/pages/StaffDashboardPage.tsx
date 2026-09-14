@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PartyQueueTable } from '../components/PartyQueueTable';
 import { TableGrid } from '../components/TableGrid';
+import { useAuth } from '../hooks/useAuth';
 import { useParties } from '../hooks/useParties';
 import { useTables } from '../hooks/useTables';
 
@@ -11,6 +12,7 @@ export function StaffDashboardPage() {
     useParties();
   const { tables, loading: tablesLoading, error: tablesError, refresh: refreshTables } =
     useTables();
+  const { staffName, logout } = useAuth();
   const [tab, setTab] = useState<Tab>('queue');
 
   const activeParties = parties.filter(
@@ -27,7 +29,15 @@ export function StaffDashboardPage() {
 
   return (
     <div className="page page-staff">
-      <h1>Staff dashboard</h1>
+      <div className="page-staff-header">
+        <h1>Staff dashboard</h1>
+        <div className="staff-session">
+          {staffName && <span className="muted">Signed in as {staffName}</span>}
+          <button type="button" className="btn btn-secondary btn-small" onClick={logout}>
+            Log out
+          </button>
+        </div>
+      </div>
 
       <div className="tabs">
         <button
