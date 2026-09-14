@@ -3,29 +3,51 @@
 Implements the backend contract described in `openapi.yaml` at the repo
 root, for the `waitlist-app` frontend. Run it with:
 
-    uv run uvicorn backend.main:app --reload
+    uv run uvicorn backend.main:create_app --factory --reload
 
-State (the in-memory store, the auth manager) is created fresh by
-`create_app()` and attached to `app.state`, rather than living in module
-globals - this lets tests spin up isolated app instances instead of sharing
-data between them.
+(`--factory` so importing this module doesn't eagerly open a database
+connection - useful for tests, which build their own isolated `create_app()`
+instances.)
+
+Long-lived state (the SQLAlchemy session factory, the auth manager, the
+event broker) is created fresh by `create_app()` and attached to
+`app.state`, rather than living in module globals - this lets tests spin up
+isolated app instances instead of sharing data between them.
 """
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .auth import create_auth_manager
+from .db import create_db_engine, create_session_factory, init_schema, resolve_database_url
 from .errors import WaitlistError
+from .events import EventBroker
 from .routers import auth as auth_router
 from .routers import events as events_router
 from .routers import guest_parties, staff_parties, staff_tables
-from .store import create_store
+from .store import WaitlistStore
 
 
-def create_app(*, seed_data: bool = True) -> FastAPI:
+def create_app(*, seed_data: bool = True, database_url: str | None = None) -> FastAPI:
+    load_dotenv()  # picks up a local .env (e.g. DATABASE_URL) if present; no-op otherwise
+
+    resolved_url = resolve_database_url(database_url)
+    engine = create_db_engine(resolved_url)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            engine.dispose()
+
     app = FastAPI(
         title="Restaurant Waitlist Manager API",
         version="1.0.0",
@@ -33,11 +55,26 @@ def create_app(*, seed_data: bool = True) -> FastAPI:
             "Backend implementation of the contract described in openapi.yaml, "
             "backing the waitlist-app frontend."
         ),
+        lifespan=lifespan,
     )
 
-    app.state.store = create_store(seed=seed_data)
+    init_schema(engine)
+    session_factory = create_session_factory(engine)
+
+    app.state.database_url = resolved_url
+    app.state.engine = engine
+    app.state.session_factory = session_factory
+    app.state.event_broker = EventBroker()
     # The staff account always exists - it's a login credential, not demo data.
     app.state.auth_manager = create_auth_manager(seed=True)
+
+    if seed_data:
+        with session_factory() as session:
+            store = WaitlistStore(session, app.state.event_broker)
+            # Only seed a fresh/empty database - avoids duplicating demo data
+            # on every restart of a persisted (file/Postgres) database.
+            if store.is_empty():
+                store.seed()
 
     app.add_middleware(
         CORSMiddleware,
@@ -63,6 +100,3 @@ def create_app(*, seed_data: bool = True) -> FastAPI:
         return {"status": "ok"}
 
     return app
-
-
-app = create_app()

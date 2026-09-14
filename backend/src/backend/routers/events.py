@@ -1,4 +1,4 @@
-"""GET /events - Server-Sent Events stream mirroring `WaitlistStore.subscribe()`.
+"""GET /events - Server-Sent Events stream mirroring `WaitlistStore` mutations.
 
 No authentication (the guest status page, which has no login, needs to
 subscribe too). Events carry no payload the client depends on - they are
@@ -7,6 +7,9 @@ subscribe too). Events carry no payload the client depends on - they are
 
 Implemented with a plain `StreamingResponse` (no extra SSE dependency) since
 the format is simple: `event: <name>\ndata: <payload>\n\n` per message.
+Subscribes to the app-wide `EventBroker` (see `events.py`) rather than to any
+particular database session, since a store instance only lives for one
+request.
 """
 
 from __future__ import annotations
@@ -17,8 +20,8 @@ from collections.abc import AsyncGenerator
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import StreamingResponse
 
-from ..dependencies import get_store
-from ..store import WaitlistStore
+from ..dependencies import get_event_broker
+from ..events import EventBroker
 
 router = APIRouter(tags=["Realtime"])
 
@@ -29,14 +32,14 @@ def _sse_message(event: str, data: str = "") -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
-async def _event_stream(request: Request, store: WaitlistStore) -> AsyncGenerator[str, None]:
+async def _event_stream(request: Request, broker: EventBroker) -> AsyncGenerator[str, None]:
     queue: asyncio.Queue[str] = asyncio.Queue()
     loop = asyncio.get_running_loop()
 
     def on_change() -> None:
         loop.call_soon_threadsafe(queue.put_nowait, "update")
 
-    unsubscribe = store.subscribe(on_change)
+    unsubscribe = broker.subscribe(on_change)
     try:
         while True:
             if await request.is_disconnected():
@@ -51,9 +54,11 @@ async def _event_stream(request: Request, store: WaitlistStore) -> AsyncGenerato
 
 
 @router.get("/events", summary="Live update stream (Server-Sent Events)")
-async def subscribe_to_events(request: Request, store: WaitlistStore = Depends(get_store)) -> StreamingResponse:
+async def subscribe_to_events(
+    request: Request, broker: EventBroker = Depends(get_event_broker)
+) -> StreamingResponse:
     return StreamingResponse(
-        _event_stream(request, store),
+        _event_stream(request, broker),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

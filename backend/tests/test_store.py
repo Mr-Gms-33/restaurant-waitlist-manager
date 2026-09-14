@@ -2,21 +2,38 @@ from __future__ import annotations
 
 import pytest
 
+from backend.db import create_db_engine, create_session_factory, init_schema
 from backend.errors import ConflictError, NotFoundError, ValidationError
+from backend.events import EventBroker
 from backend.models import PartyStatus, TableStatus
-from backend.store import create_store
+from backend.store import WaitlistStore
 
 
 @pytest.fixture
-def store():
-    return create_store(seed=False)
+def session():
+    engine = create_db_engine("sqlite:///:memory:")
+    init_schema(engine)
+    factory = create_session_factory(engine)
+    with factory() as session:
+        yield session
+    engine.dispose()
+
+
+@pytest.fixture
+def broker():
+    return EventBroker()
+
+
+@pytest.fixture
+def store(session, broker):
+    return WaitlistStore(session, broker)
 
 
 def test_join_waitlist_adds_a_waiting_party(store):
     party = store.join_waitlist(name="Ada Lovelace", party_size=3, contact="555-1234")
     assert party.status == PartyStatus.WAITING
     assert party.estimated_wait_minutes is None
-    assert store.get_party(party.id) is party
+    assert store.get_party(party.id) == party
 
 
 def test_join_waitlist_rejects_blank_name(store):
@@ -72,6 +89,16 @@ def test_reorder_parties_rejects_incomplete_id_set(store):
         store.reorder_parties(["bogus"])
 
 
+def test_reorder_parties_updates_list_order(store):
+    a = store.join_waitlist(name="A", party_size=1, contact="1")
+    b = store.join_waitlist(name="B", party_size=1, contact="2")
+    c = store.join_waitlist(name="C", party_size=1, contact="3")
+
+    reordered = store.reorder_parties([c.id, a.id, b.id])
+    assert [p.id for p in reordered] == [c.id, a.id, b.id]
+    assert [p.id for p in store.list_parties()] == [c.id, a.id, b.id]
+
+
 def test_remove_table_rejects_when_assigned(store):
     party = store.join_waitlist(name="A", party_size=2, contact="1")
     table = store.add_table(name="T1", capacity=2)
@@ -88,9 +115,9 @@ def test_not_found_errors_for_unknown_ids(store):
         store.release_table("nope")
 
 
-def test_subscribers_are_notified_on_mutation(store):
+def test_notifies_broker_on_mutation(store, broker):
     calls = []
-    unsubscribe = store.subscribe(lambda: calls.append(1))
+    unsubscribe = broker.subscribe(lambda: calls.append(1))
 
     store.join_waitlist(name="A", party_size=1, contact="1")
     assert len(calls) == 1
@@ -100,7 +127,29 @@ def test_subscribers_are_notified_on_mutation(store):
     assert len(calls) == 1
 
 
-def test_seed_populates_demo_parties_and_tables():
-    store = create_store(seed=True)
+def test_is_empty_and_seed(store):
+    assert store.is_empty() is True
+
+    store.seed()
+
+    assert store.is_empty() is False
     assert len(store.list_parties()) == 2
     assert len(store.list_tables()) == 6
+
+
+def test_data_persists_across_store_instances_sharing_a_session_factory():
+    """Regression check that we're really talking to the database, not to
+    Python objects held by one `WaitlistStore` instance."""
+    engine = create_db_engine("sqlite:///:memory:")
+    init_schema(engine)
+    factory = create_session_factory(engine)
+
+    with factory() as session:
+        WaitlistStore(session).join_waitlist(name="Persisted", party_size=2, contact="1")
+
+    with factory() as session:
+        parties = WaitlistStore(session).list_parties()
+
+    assert len(parties) == 1
+    assert parties[0].name == "Persisted"
+    engine.dispose()

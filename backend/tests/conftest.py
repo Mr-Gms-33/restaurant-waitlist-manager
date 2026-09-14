@@ -11,8 +11,12 @@ DEFAULT_STAFF_PASSWORD = "waitlist123"
 
 @pytest.fixture
 def app():
-    """A fresh app with an empty store (no demo parties/tables), for deterministic tests."""
-    return create_app(seed_data=False)
+    """A fresh app with an empty store (no demo parties/tables), for deterministic tests.
+
+    Each test gets its own isolated in-memory SQLite database (never touches
+    the real `waitlist.db` file).
+    """
+    return create_app(seed_data=False, database_url="sqlite:///:memory:")
 
 
 @pytest.fixture
@@ -23,7 +27,7 @@ def client(app) -> TestClient:
 @pytest.fixture
 def seeded_app():
     """A fresh app pre-populated with demo data, like the one the frontend talks to."""
-    return create_app(seed_data=True)
+    return create_app(seed_data=True, database_url="sqlite:///:memory:")
 
 
 @pytest.fixture

@@ -30,7 +30,7 @@ staff-only request.
 1. Start the backend (see `../backend/README.md`):
    ```powershell
    cd ../backend
-   uv run uvicorn backend.main:app --reload --port 8000
+   uv run uvicorn backend.main:create_app --factory --reload --port 8000
    ```
 2. Copy `.env.example` to `.env.local` if you need to point at a different
    backend URL (defaults to `http://localhost:8000/api/v1`).
