@@ -1,7 +1,7 @@
 # Restaurant Waitlist Manager - Backend
 
 FastAPI implementation of the contract described in [`../openapi.yaml`](../openapi.yaml),
-built to back the `waitlist-app` frontend (`../waitlist-app`).
+built to back the `frontend` app (`../frontend`).
 
 ## Stack
 

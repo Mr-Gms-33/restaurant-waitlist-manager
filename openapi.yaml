@@ -2,8 +2,8 @@ openapi: 3.0.3
 info:
   title: Restaurant Waitlist Manager API
   description: >
-    Backend contract expected by the `waitlist-app` frontend
-    (`waitlist-app/src/services/WaitlistService.ts`). The frontend currently
+    Backend contract expected by the `frontend` app
+    (`frontend/src/services/WaitlistService.ts`). The frontend currently
     talks to a mock implementation (`mockWaitlistService.ts`) that holds this
     same data in memory/localStorage; this document specifies the real HTTP
     API a backend must implement so the frontend can swap the mock for a real

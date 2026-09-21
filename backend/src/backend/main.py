@@ -1,7 +1,7 @@
 """FastAPI application factory.
 
 Implements the backend contract described in `openapi.yaml` at the repo
-root, for the `waitlist-app` frontend. Run it with:
+root, for the `frontend` app. Run it with:
 
     uv run uvicorn backend.main:create_app --factory --reload
 
@@ -53,7 +53,7 @@ def create_app(*, seed_data: bool = True, database_url: str | None = None) -> Fa
         version="1.0.0",
         description=(
             "Backend implementation of the contract described in openapi.yaml, "
-            "backing the waitlist-app frontend."
+            "backing the frontend app."
         ),
         lifespan=lifespan,
     )

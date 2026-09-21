@@ -11,14 +11,14 @@ shared by both apps below.
 
 ```
 backend/          FastAPI backend implementing openapi.yaml
-waitlist-app/     React + TypeScript + Vite frontend (guest + staff UI)
+frontend/         React + TypeScript + Vite frontend (guest + staff UI)
 openapi.yaml      API contract - every endpoint, request/response, auth
 restaurant-waitlist-scope.md   Product scope / MVP definition
 ```
 
 Each app has its own README with full setup/run/test instructions:
 [`backend/README.md`](backend/README.md) and
-[`waitlist-app/README.md`](waitlist-app/README.md).
+[`frontend/README.md`](frontend/README.md).
 
 ## Stack
 
@@ -43,10 +43,10 @@ Each app has its own README with full setup/run/test instructions:
    - Docs: `http://localhost:8000/docs`
    - Seeded staff login: `staff` / `waitlist123`
 
-2. **Frontend** (see [`waitlist-app/README.md`](waitlist-app/README.md) for
+2. **Frontend** (see [`frontend/README.md`](frontend/README.md) for
    details), in a second terminal:
    ```powershell
-   cd waitlist-app
+   cd frontend
    npm install
    npm run dev
    ```
@@ -54,14 +54,14 @@ Each app has its own README with full setup/run/test instructions:
    - Staff dashboard: `http://localhost:5173/staff`
 
    If you change the backend's port, update
-   `waitlist-app/.env.local` (copy from `.env.example`) to match -
+   `frontend/.env.local` (copy from `.env.example`) to match -
    `VITE_API_BASE_URL` must point at the running backend.
 
 ## Tests
 
 ```powershell
 cd backend && uv run pytest
-cd waitlist-app && npm test
+cd frontend && npm test
 ```
 
 ## Notes
