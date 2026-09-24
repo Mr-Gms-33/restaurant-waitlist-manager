@@ -29,10 +29,15 @@ def resolve_database_url(override: str | None = None) -> str:
     """The `DATABASE_URL` environment variable wins unless `override` is given
     (used by tests/the app factory to force an isolated database)."""
     url = override or os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
-    # Render and some other platforms expose Postgres as `postgres://...`.
-    # SQLAlchemy expects `postgresql://...` (or explicit driver form).
+    # Render and other platforms may expose either:
+    #   - postgres://...
+    #   - postgresql://...
+    # If no explicit driver is supplied, SQLAlchemy may default to psycopg2.
+    # This project installs psycopg v3 (`psycopg`), so force that driver.
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+psycopg://", 1)
+    if url.startswith("postgresql://") and "+psycopg" not in url:
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
     return url
 
 
