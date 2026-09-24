@@ -18,12 +18,15 @@ isolated app instances instead of sharing data between them.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import os
+from pathlib import Path
 from typing import AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .auth import create_auth_manager
 from .db import create_db_engine, create_session_factory, init_schema, resolve_database_url
@@ -33,6 +36,60 @@ from .routers import auth as auth_router
 from .routers import events as events_router
 from .routers import guest_parties, staff_parties, staff_tables
 from .store import WaitlistStore
+
+
+def _resolve_frontend_dist_dir(override: str | None = None) -> Path:
+    """Resolve where static frontend files should be served from.
+
+    Resolution order:
+      1. Explicit argument (used by tests/alternate app factories).
+      2. FRONTEND_DIST_DIR env var (used by Docker image runtime).
+      3. Local dev default: ../../frontend/dist from this file.
+    """
+    if override:
+        return Path(override).resolve()
+
+    env_value = os.environ.get("FRONTEND_DIST_DIR")
+    if env_value:
+        return Path(env_value).resolve()
+
+    return (Path(__file__).resolve().parents[3] / "frontend" / "dist").resolve()
+
+
+def _mount_frontend(app: FastAPI, dist_dir: Path) -> None:
+    """Serve the compiled frontend if available.
+
+    The API routes are registered first, then this catch-all is added last so
+    API/docs paths keep their dedicated handlers. If dist isn't present (normal
+    local backend-only development), we skip mounting entirely.
+    """
+    if not dist_dir.exists():
+        return
+
+    assets_dir = dist_dir / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="frontend-assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_frontend(full_path: str) -> FileResponse:
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        if full_path in {"docs", "redoc", "openapi.json", "health"}:
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        requested = (dist_dir / full_path).resolve()
+        try:
+            requested.relative_to(dist_dir)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="Not Found") from exc
+
+        if full_path and requested.is_file():
+            return FileResponse(requested)
+
+        index_file = dist_dir / "index.html"
+        if index_file.exists():
+            return FileResponse(index_file)
+        raise HTTPException(status_code=404, detail="Frontend build not found")
 
 
 def create_app(*, seed_data: bool = True, database_url: str | None = None) -> FastAPI:
@@ -98,5 +155,7 @@ def create_app(*, seed_data: bool = True, database_url: str | None = None) -> Fa
     @app.get("/health", tags=["Health"], summary="Liveness check")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    _mount_frontend(app, _resolve_frontend_dist_dir())
 
     return app

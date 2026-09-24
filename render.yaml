@@ -1,0 +1,21 @@
+databases:
+  - name: sdip-postgres
+    plan: free
+    databaseName: sdip
+    user: sdip
+
+services:
+  - type: web
+    name: sdip-app
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sdip-postgres
+          property: connectionString
+      - key: FRONTEND_DIST_DIR
+        value: /app/frontend_dist

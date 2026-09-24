@@ -1,0 +1,14 @@
+.git
+.github
+.cursor
+.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/node_modules
+**/dist
+backend/.venv
+backend/waitlist.db
+frontend/.env.local
+frontend/vite.log

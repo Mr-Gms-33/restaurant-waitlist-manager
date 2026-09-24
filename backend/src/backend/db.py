@@ -1,8 +1,7 @@
 """Database engine/session setup.
 
 Deliberately database-agnostic: `store.py` only ever talks to SQLAlchemy's
-ORM/Core query API, never to a specific driver. Switching from SQLite to
-Postgres (or anything else SQLAlchemy supports) later is just:
+ORM/Core query API, never to a specific driver. Switching databases is just:
 
   1. `pip install`/`uv add` the driver (e.g. `psycopg[binary]` for Postgres).
   2. Point `DATABASE_URL` at it, e.g. `postgresql+psycopg://user:pass@host/db`.
@@ -29,7 +28,12 @@ DEFAULT_DATABASE_URL = "sqlite:///./waitlist.db"
 def resolve_database_url(override: str | None = None) -> str:
     """The `DATABASE_URL` environment variable wins unless `override` is given
     (used by tests/the app factory to force an isolated database)."""
-    return override or os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    url = override or os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    # Render and some other platforms expose Postgres as `postgres://...`.
+    # SQLAlchemy expects `postgresql://...` (or explicit driver form).
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg://", 1)
+    return url
 
 
 def create_db_engine(database_url: str) -> Engine:

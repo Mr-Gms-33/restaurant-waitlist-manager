@@ -7,10 +7,11 @@ built to back the `frontend` app (`../frontend`).
 
 - **FastAPI** + **Pydantic v2** (camelCase JSON in/out, matching the frontend's
   `src/types/domain.ts`)
-- **SQLAlchemy + SQLite** (`src/backend/db.py`, `src/backend/db_models.py`,
+- **SQLAlchemy + Postgres** (`src/backend/db.py`, `src/backend/db_models.py`,
   `src/backend/store.py`) for parties/tables - data persists across
   restarts. Database-agnostic: pick any SQLAlchemy-supported database via
-  `DATABASE_URL` (see [Database](#database) below).
+  `DATABASE_URL` (see [Database](#database) below). SQLite still works as a
+  local fallback.
 - **Bearer-token auth** for staff endpoints (`src/backend/auth.py`) - PBKDF2
   password hashing, random opaque session tokens (no external auth deps).
 - **Server-Sent Events** (`GET /api/v1/events`) for live updates, mirroring
@@ -71,12 +72,11 @@ Configure it with the `DATABASE_URL` environment variable (a `.env` file in
 `backend/` is also picked up automatically - see `.env.example`):
 
 ```powershell
-# Default if unset - a local SQLite file, created next to wherever the
-# server is run from. Data persists across restarts.
-$env:DATABASE_URL = "sqlite:///./waitlist.db"
+# Postgres (recommended):
+$env:DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/sdip"
 
-# Postgres, once a driver is installed (e.g. `uv add "psycopg[binary]"`):
-$env:DATABASE_URL = "postgresql+psycopg://user:password@localhost:5432/waitlist"
+# SQLite fallback (local file, no DB service required):
+# $env:DATABASE_URL = "sqlite:///./waitlist.db"
 ```
 
 Tables are created automatically on startup (`Base.metadata.create_all`); a
@@ -107,6 +107,18 @@ Use the returned `accessToken` as `Authorization: Bearer <token>` on every
 ```powershell
 uv run pytest
 ```
+
+Docker Compose integration tests (full app + Postgres containers):
+
+```powershell
+$env:RUN_DOCKER_COMPOSE_TESTS = "1"
+uv run pytest -q tests/test_docker_compose_integration.py
+```
+
+These cover:
+- frontend static files served by backend (`GET /`)
+- auth + guest/staff API workflow end-to-end
+- Postgres-backed persistence across app container restart
 
 ## Notes / limitations
 

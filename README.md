@@ -26,9 +26,9 @@ Each app has its own README with full setup/run/test instructions:
   decouples the UI from the backend, with a real HTTP implementation and an
   in-memory mock (for offline UI work/tests).
 - **Backend:** FastAPI + Pydantic (camelCase JSON matching the frontend's
-  types), SQLAlchemy + SQLite for storage (database-agnostic - swappable to
-  Postgres via one environment variable), bearer-token staff auth, and
-  Server-Sent Events for live updates.
+  types), SQLAlchemy + Postgres for storage (database-agnostic; SQLite still
+  available as fallback), bearer-token staff auth, and Server-Sent Events for
+  live updates.
 - **Tests:** Vitest + React Testing Library (frontend), Pytest (backend).
 
 ## Quickstart
@@ -63,6 +63,29 @@ Each app has its own README with full setup/run/test instructions:
 cd backend && uv run pytest
 cd frontend && npm test
 ```
+
+## Docker (Postgres)
+
+Run the full app + Postgres with Docker Compose:
+
+```powershell
+docker compose up --build
+```
+
+- App/UI: `http://localhost:8000`
+- API docs: `http://localhost:8000/docs`
+
+## Deploy on Render
+
+This repo includes `render.yaml` (Blueprint) for one web service + one
+managed Postgres database.
+
+1. Push the repo to GitHub.
+2. In Render, create a **Blueprint** and point it at this repo.
+3. Render provisions:
+   - `sdip-postgres` (managed Postgres)
+   - `sdip-app` (Docker web service)
+4. Open the deployed URL (the backend also serves the frontend static app).
 
 ## Notes
 
