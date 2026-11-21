@@ -1,95 +1,113 @@
+<div align="center">
+
 # Restaurant Waitlist Manager
 
-A waitlist management tool for an independent restaurant pilot: guests join
-remotely and track their status from their phone, staff manage the queue and
-tables from a live dashboard. See
-[`restaurant-waitlist-scope.md`](restaurant-waitlist-scope.md) for the full
-product scope, and [`openapi.yaml`](openapi.yaml) for the API contract
-shared by both apps below.
+**Operational waitlist product**
 
-## Repo layout
+Full-stack waitlist management for restaurants — FastAPI backend, React frontend, and Docker delivery.
 
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
+[![Portfolio](https://img.shields.io/badge/Portfolio-mounir--gmamsi-1b3550?style=for-the-badge&logo=netlify&logoColor=white)](https://mounir-gmamsi.netlify.app/)
+
+</div>
+
+---
+
+## Overview
+
+Restaurant Waitlist Manager helps restaurants manage guest queues digitally. The system follows an OpenAPI contract, with a FastAPI backend, PostgreSQL persistence, and a TypeScript React client for day-to-day waitlist operations.
+
+---
+
+## What the product delivers
+
+| Capability | Description |
+|------------|-------------|
+| Waitlist operations | Add, update and track waiting guests |
+| API contract | OpenAPI-driven backend implementation |
+| Staff UI | React application for operational use |
+| Persistence | Relational storage for waitlist state |
+| Local delivery | Docker Compose end-to-end stack |
+| Quality | Backend and frontend tests |
+
+---
+
+## Technology stack
+
+### Backend
+
+![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Uvicorn](https://img.shields.io/badge/Uvicorn-222222?style=flat-square)
+
+### Frontend
+
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white)
+
+### Platform
+
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+![OpenAPI](https://img.shields.io/badge/OpenAPI-6BA539?style=flat-square&logo=openapiinitiative&logoColor=white)
+![Git](https://img.shields.io/badge/Git-F05032?style=flat-square&logo=git&logoColor=white)
+
+| Layer | Technologies |
+|-------|----------------|
+| API | FastAPI, SQLAlchemy, PostgreSQL, Uvicorn |
+| UI | React, TypeScript, Vite |
+| Contract | OpenAPI (`openapi.yaml`) |
+| Ops | Docker Compose, Makefile |
+
+---
+
+## Solution flow
+
+| Step | Stage | Technologies |
+|:----:|-------|--------------|
+| 1 | Staff updates waitlist in UI | React, TypeScript |
+| 2 | API validates against contract | FastAPI, OpenAPI |
+| 3 | Persist queue state | SQLAlchemy, PostgreSQL |
+| 4 | Refresh UI status | REST JSON |
+| 5 | Run stack locally | Docker Compose |
+
+```mermaid
+flowchart TD
+  A[1. Waitlist UI] --> B[2. FastAPI endpoints]
+  B --> C[3. PostgreSQL state]
+  C --> D[4. Updated queue view]
 ```
-backend/          FastAPI backend implementing openapi.yaml
-frontend/         React + TypeScript + Vite frontend (guest + staff UI)
-openapi.yaml      API contract - every endpoint, request/response, auth
-restaurant-waitlist-scope.md   Product scope / MVP definition
-```
 
-Each app has its own README with full setup/run/test instructions:
-[`backend/README.md`](backend/README.md) and
-[`frontend/README.md`](frontend/README.md).
+---
 
-## Stack
+## Repository structure
 
-- **Frontend:** React, TypeScript, Vite. A `WaitlistService` interface
-  decouples the UI from the backend, with a real HTTP implementation and an
-  in-memory mock (for offline UI work/tests).
-- **Backend:** FastAPI + Pydantic (camelCase JSON matching the frontend's
-  types), SQLAlchemy + Postgres for storage (database-agnostic; SQLite still
-  available as fallback), bearer-token staff auth, and Server-Sent Events for
-  live updates.
-- **Tests:** Vitest + React Testing Library (frontend), Pytest (backend).
+| Path | Purpose |
+|------|---------|
+| `backend/` | FastAPI service (uv / pyproject) |
+| `frontend/` | React + Vite client |
+| `openapi.yaml` | API contract |
+| `docker-compose.yml` | Local stack |
+| `e2e/` | End-to-end tests |
 
-## Quickstart
+---
 
-1. **Backend** (see [`backend/README.md`](backend/README.md) for details):
-   ```powershell
-   cd backend
-   uv sync
-   uv run uvicorn backend.main:create_app --factory --reload --port 8000
-   ```
-   - API: `http://localhost:8000/api/v1`
-   - Docs: `http://localhost:8000/docs`
-   - Seeded staff login: `staff` / `waitlist123`
+## Run locally
 
-2. **Frontend** (see [`frontend/README.md`](frontend/README.md) for
-   details), in a second terminal:
-   ```powershell
-   cd frontend
-   npm install
-   npm run dev
-   ```
-   - Guest join page: `http://localhost:5173/`
-   - Staff dashboard: `http://localhost:5173/staff`
-
-   If you change the backend's port, update
-   `frontend/.env.local` (copy from `.env.example`) to match -
-   `VITE_API_BASE_URL` must point at the running backend.
-
-## Tests
-
-```powershell
-cd backend && uv run pytest
-cd frontend && npm test
-```
-
-## Docker (Postgres)
-
-Run the full app + Postgres with Docker Compose:
-
-```powershell
+```bash
 docker compose up --build
 ```
 
-- App/UI: `http://localhost:8000`
-- API docs: `http://localhost:8000/docs`
+See `Makefile` and backend/frontend READMEs for development workflows.
 
-## Deploy on Render
+---
 
-This repo includes `render.yaml` (Blueprint) for one web service + one
-managed Postgres database.
+## Author
 
-1. Push the repo to GitHub.
-2. In Render, create a **Blueprint** and point it at this repo.
-3. Render provisions:
-   - `sdip-postgres` (managed Postgres)
-   - `sdip-app` (Docker web service)
-4. Open the deployed URL (the backend also serves the frontend static app).
-
-## Notes
-
-- This is a single-instance pilot setup: in-memory SSE pub/sub, no auth
-  roles beyond one staff account, wide-open CORS. See each app's README for
-  specific limitations and next steps (e.g. Postgres, Alembic migrations,
-  multi-instance realtime).
+**Mounir Gmamsi**  
+[Portfolio](https://mounir-gmamsi.netlify.app/) · [GitHub](https://github.com/Mr-Gms-33) · [LinkedIn](https://www.linkedin.com/in/mounir-gmamsi-1595951b3)
